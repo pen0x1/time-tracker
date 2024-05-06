@@ -28,7 +28,7 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
 
-    let server_address = env::var("SERVER_URL").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+    let server_address = env::var("SERVER_URL").unwrap_or_else(|_| "127.0.0.1:8080");
 
     println!("Starting server at: {}", &server_address);
 
