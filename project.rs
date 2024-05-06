@@ -19,61 +19,61 @@ lazy_static::lazy_static! {
 
 async fn add_project(project: web::Json<Project>) -> impl Responder {
     let id = PROJECT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+    
+    let mut projects = match PROJECTS.lock() {
+        Ok(projects) => projects,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    };
+    
     let mut new_project = project.into_inner();
     new_project.id = id;
-
-    match PROJECTS.lock() {
-        Ok(mut projects) => {
-            projects.insert(id, new_project);
-            log::info!("Project added successfully with id: {}", id);
-            HttpResponse::Created().json("Project added successfully")
-        },
-        Err(_) => HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    }
+    
+    projects.insert(id, new_project);
+    log::info!("Project added successfully with id: {}", id);
+    HttpResponse::Created().json("Project added successfully")
 }
 
 async fn get_project(info: web::Path<u32>) -> impl Responder {
-    match PROJECTS.lock() {
-        Ok(projects) => {
-            if let Some(project) = projects.get(&info) {
-                HttpResponse::Ok().json(project)
-            } else {
-                HttpResponse::NotFound().body("Project not found")
-            }
-        }
-        Err(_) => HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    let projects = match PROJECTS.lock() {
+        Ok(projects) => projects,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    };
+    
+    match projects.get(&info) {
+        Some(project) => HttpResponse::Ok().json(project),
+        None => HttpResponse::NotFound().body("Project not found"),
     }
 }
 
 async fn edit_project(id: web::Path<u32>, project: web::Json<Project>) -> impl Responder {
+    let mut projects = match PROJECTS.lock() {
+        Ok(projects) => projects,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    };
+    
+    if !projects.contains_key(&id) {
+        return HttpResponse::NotFound().body("Project not found for updating");
+    }
+    
     let mut edited_project = project.into_inner();
     edited_project.id = *id;
     
-    match PROJECTS.lock() {
-        Ok(mut projects) => {
-            if projects.contains_key(&id) {
-                projects.insert(*id, edited_project);
-                log::info!("Project updated successfully for id: {}", id);
-                HttpResponse::Ok().json("Project updated successfully")
-            } else {
-                HttpResponse::NotFound().body("Project not found for updating")
-            }
-        }
-        Err(_) => HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    }
+    projects.insert(*id, edited_project);
+    log::info!("Project updated successfully for id: {}", id);
+    HttpResponse::Ok().json("Project updated successfully")
 }
 
 async fn delete_project(id: web::Path<u32>) -> impl Responder {
-    match PROJECTS.lock() {
-        Ok(mut projects) => {
-            if projects.remove(&id).is_some() {
-                log::info!("Project deleted with id: {}", id);
-                HttpResponse::Ok().body("Project deleted")
-            } else {
-                HttpResponse::NotFound().body("Project not found for deletion")
-            }
-        }
-        Err(_) => HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    let mut projects = match PROJECTS.lock() {
+        Ok(projects) => projects,
+        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
+    };
+    
+    if projects.remove(&id).is_some() {
+        log::info!("Project deleted with id: {}", id);
+        HttpResponse::Ok().body("Project deleted")
+    } else {
+        HttpResponse::NotFound().body("Project not found for deletion")
     }
 }
 
