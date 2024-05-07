@@ -1,6 +1,28 @@
-use chrono::{NaiveDate, NaiveDateTime, Duration};
+#[derive(Debug)]
+enum TimeManagerError {
+    EntryNotFound,
+    InvalidOperation(String),
+}
+
+use chrono::{NaiveDate, NaiveDateTime, Duration, Local};
 use std::collections::HashMap;
 use std::env;
+use std::fmt;
+
+#[derive(Debug)]
+enum TimeManagerError {
+    EntryNotFound,
+    InvalidOperation(String),
+}
+
+impl fmt::Display for TimeManagerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TimeManagerError::EntryNotFound => write!(f, "Entry not found"),
+            TimeManagerError::InvalidOperation(ref msg) => write!(f, "Invalid operation: {}", msg),
+        }
+    }
+}
 
 struct TimeEntry {
     project_id: u32,
@@ -42,29 +64,29 @@ impl TimeManager {
         self.entries.push(entry);
     }
 
-    fn update_entry(&mut self, entry_index: usize, new_start: NaiveDateTime, new_end: Option<NaiveDateTime>) -> bool {
+    fn update_entry(&mut self, entry_index: usize, new_start: NaiveDateTime, new_end: Option<NaiveDateTime>) -> Result<(), TimeManagerError> {
         if let Some(entry) = self.entries.get_mut(entry_index) {
             entry.start = new_start;
             entry.end = new_end;
-            true
+            Ok(())
         } else {
-            false
+            Err(TimeManagerError::EntryNotFound)
         }
     }
 
-    fn delete_entry(&mut self, entry_index: usize) -> bool {
+    fn delete_entry(&mut self, entry_index: usize) -> Result<(), TimeManagerError> {
         if entry_index < self.entries.len() {
             self.entries.remove(entry_index);
-            true
+            Ok(())
         } else {
-            false
+            Err(TimeManagerError::EntryNotFound)
         }
     }
 
     fn calculate_project_time(&self, project_id: u32) -> Duration {
         self.entries.iter()
                     .filter(|e| e.project_id == project_id)
-                    .map(|e| e.end.unwrap_or(chrono::Local::now().naive_local()) - e.start)
+                    .map(|e| e.end.unwrap_or(Local::now().naive_local()) - e.start)
                     .fold(Duration::zero(), |acc, d| acc + d)
     }
     
@@ -72,7 +94,7 @@ impl TimeManager {
         self.entries.iter()
                     .filter(|e| e.start.date() >= from_date && e.start.date() <= to_date)
                     .fold(HashMap::new(), |mut acc, e| {
-                        let duration = e.end.unwrap_or(chrono::Local::now().naive_local()) - e.start;
+                        let duration = e.end.unwrap_or(Local::now().naive_local()) - e.start;
                         *acc.entry(e.project_id).or_insert(Duration::zero()) += duration;
                         acc
                     })
@@ -83,7 +105,18 @@ fn main() {
     let mut manager = TimeManager::new();
     let start = NaiveDate::from_ymd(2023, 9, 15).and_hms(9, 0, 0);
     let end = Some(NaiveDate::from_ymd(2023, 9, 15).and_hms(17, 30, 0));
+    
     manager.add_entry(1, start, end);
+
+    let update_result = manager.update_entry(0, start, end);
+    if update_result.is_err() {
+        println!("Failed to update entry: {}", update_result.unwrap_err());
+    }
+
+    let delete_result = manager.delete_entry(1);
+    if delete_result.is_err() {
+        println!("Failed to delete entry: {}", delete_result.unwrap_err());
+    }
 
     let project_time = manager.calculate_project_time(1);
     println!("Time spent on project 1: {:?}", project_time);
