@@ -1,23 +1,30 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Switch, Route, Link, Redirect } from 'react-router-dom';
 
-const env = {
-    REACT_APP_API_URL: 'http://yourapiurl.com'
-};
-
-const Login = ({onLogin}) => {
+const Login = ({ onLogin }) => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
 
     const handleSubmit = (e) => {
         e.preventDefault();
         console.log(`Login with ${email} and ${password}`);
-        onLogin(true); 
+        // Simulate an API call
+        try {
+            // Simulating error
+            if (email === 'error@example.com') {
+                throw new Error('Invalid login credentials');
+            }
+            onLogin(true);
+        } catch (err) {
+            setError(err.message);
+        }
     };
 
     return (
         <div>
             <h2>Login</h2>
+            {error && <p style={{ color: 'red' }}>{error}</p>}
             <form onSubmit={handleSubmit}>
                 <div>
                     <label>Email:</label>
@@ -36,15 +43,27 @@ const Login = ({onLogin}) => {
 const Register = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
 
     const handleSubmit = (e) => {
         e.preventDefault();
         console.log(`Register with ${email} and ${password}`);
+        // Here you would typically handle the registration via API call.
+        // The try-catch block is to simulate error handling.
+        try {
+            if (email === 'error@example.com') {
+                throw new Error('Error during registration');
+            }
+            // Assuming successful registration...
+        } catch (err) {
+            setError(err.message);
+        }
     };
 
     return (
         <div>
             <h2>Register</h2>
+            {error && <p style={{ color: 'red' }}>{error}</p>}
             <form onSubmit={handleSubmit}>
                 <div>
                     <label>Email:</label>
