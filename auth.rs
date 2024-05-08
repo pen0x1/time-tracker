@@ -29,47 +29,58 @@ fn register_user(users_db: UsersDb, username: &str, password: &str) -> Result<()
     if db.contains_key(username) {
         Err("User already exists".to_string())
     } else {
-        db.insert(username.to_string(), User {
-            username: username.to_string(),
-            password: password.to_string(),
-        });
+        db.insert(username.to_string(), create_user(username, password));
         Ok(())
     }
 }
 
-fn login_user(users_db: UsersDb, username: &str, password: &str) -> Result<String, String> {
-    let db = users_db.lock().unwrap();
-    if let Some(user) = db.get(username) {
-        if user.password == password {
-            let expiration = chrono::Utc::now()
-                .checked_add_signed(chrono::Duration::days(1))
-                .expect("valid timestamp")
-                .timestamp();
-
-            let claims = Claims {
-                sub: username.to_string(),
-                exp: expiration as usize,
-            };
-
-            let header = Header::new(Algorithm::HS256);
-            let secret = env::var(SECRET_KEY).expect("SECRET_KEY must be set");
-
-            encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))
-                .map_err(|e| e.to_string())
-        } else {
-            Err("Invalid username or password".to_string())
-        }
-    } else {
-        Err("User does not exist".to_string())
+fn create_user(username: &str, password: &str) -> User {
+    User {
+        username: username.to_string(),
+        password: password.to_string(),
     }
 }
 
+fn login_user(users_db: UsersDb, username: &str, password: &str) -> Result<String, String> {
+    match authenticate_user(&users_db, username, password) {
+        Ok(user) => create_token_for_user(&user),
+        Err(e) => Err(e),
+    }
+}
+
+fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Result<User, String> {
+    let db = users_db.lock().unwrap();
+    db.get(username)
+        .filter(|user| user.password == password)
+        .cloned()
+        .ok_or_else(|| "Invalid username or password".to_string())
+}
+
+fn create_token_for_user(user: &User) -> Result<String, String> {
+    let expiration = calculate_expiration(1); // 1 day
+    let claims = Claims {
+        sub: user.username.to_owned(),
+        exp: expiration,
+    };
+
+    let header = Header::new(Algorithm::HS256);
+    let secret = env::var(SECRET_KEY).expect("SECRET_KEY must be set");
+    encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes())).map_err(|e| e.to_string())
+}
+
+fn calculate_expiration(days: i64) -> usize {
+    chrono::Utc::now()
+        .checked_add_signed(chrono::Duration::days(days))
+        .expect("valid timestamp")
+        .timestamp() as usize
+}
+
 fn verify_token(token: &str) -> bool {
-    true
+    true // Placeholder for actual verification logic
 }
 
 fn main() {
-    dotenv::dotenv().ok(); 
+    dotenv::dotenv().ok();
 
     let users_db = init_users_db();
 
