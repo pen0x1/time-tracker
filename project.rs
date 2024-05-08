@@ -1,9 +1,9 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Project {
@@ -20,10 +20,7 @@ lazy_static::lazy_static! {
 async fn add_project(project: web::Json<Project>) -> impl Responder {
     let id = PROJECT_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
     
-    let mut projects = match PROJECTS.lock() {
-        Ok(projects) => projects,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    };
+    let mut projects = PROJECTS.lock().unwrap_or_else(|e| panic!("Project lock failed: {}", e));
     
     let mut new_project = project.into_inner();
     new_project.id = id;
@@ -34,10 +31,7 @@ async fn add_project(project: web::Json<Project>) -> impl Responder {
 }
 
 async fn get_project(info: web::Path<u32>) -> impl Responder {
-    let projects = match PROJECTS.lock() {
-        Ok(projects) => projects,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    };
+    let projects = PROJECTS.lock().unwrap_or_else(|e| panic!("Project lock failed: {}", e));
     
     match projects.get(&info) {
         Some(project) => HttpResponse::Ok().json(project),
@@ -46,15 +40,12 @@ async fn get_project(info: web::Path<u32>) -> impl Responder {
 }
 
 async fn edit_project(id: web::Path<u32>, project: web::Json<Project>) -> impl Responder {
-    let mut projects = match PROJECTS.lock() {
-        Ok(projects) => projects,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    };
+    let mut projects = PROJECTS.lock().unwrap_or_else(|e| panic!("Project lock failed: {}", e));
     
     if !projects.contains_key(&id) {
         return HttpResponse::NotFound().body("Project not found for updating");
     }
-    
+
     let mut edited_project = project.into_inner();
     edited_project.id = *id;
     
@@ -64,10 +55,7 @@ async fn edit_project(id: web::Path<u32>, project: web::Json<Project>) -> impl R
 }
 
 async fn delete_project(id: web::Path<u32>) -> impl Responder {
-    let mut projects = match PROJECTS.lock() {
-        Ok(projects) => projects,
-        Err(_) => return HttpResponse::InternalServerError().body("Failed to acquire lock"),
-    };
+    let mut projects = PROJECTS.lock().unwrap_or_else(|e| panic!("Project lock failed: {}", e));
     
     if projects.remove(&id).is_some() {
         log::info!("Project deleted with id: {}", id);
@@ -93,7 +81,7 @@ async fn main() -> std::io::Result<()> {
                     .route(web::delete().to(delete_project)),
             )
     })
-    .bind(server_address)?
+    .bind(&server_address)?
     .run()
     .await
 }
