@@ -9,21 +9,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt;
 
-#[derive(Debug)]
-enum TimeManagerError {
-    EntryNotFound,
-    InvalidOperation(String),
-}
-
-impl fmt::Display for TimeManagerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            TimeManagerError::EntryNotFound => write!(f, "Entry not found"),
-            TimeManagerError::InvalidOperation(ref msg) => write!(f, "Invalid operation: {}", msg),
-        }
-    }
-}
-
+#[derive(Debug, Clone)]
 struct TimeEntry {
     project_id: u32,
     start: NaiveDateTime,
@@ -85,19 +71,27 @@ impl TimeManager {
 
     fn calculate_project_time(&self, project_id: u32) -> Duration {
         self.entries.iter()
-                    .filter(|e| e.project_id == project_id)
-                    .map(|e| e.end.unwrap_or(Local::now().naive_local()) - e.start)
-                    .fold(Duration::zero(), |acc, d| acc + d)
+            .filter(|e| e.project_id == project_id)
+            .map(|e| e.end.unwrap_or(Local::now().naive_local()) - e.start)
+            .fold(Duration::zero(), |acc, d| acc + d)
     }
-    
+
     fn summarize_time(&self, from_date: NaiveDate, to_date: NaiveDate) -> HashMap<u32, Duration> {
         self.entries.iter()
-                    .filter(|e| e.start.date() >= from_date && e.start.date() <= to_date)
-                    .fold(HashMap::new(), |mut acc, e| {
-                        let duration = e.end.unwrap_or(Local::now().naive_local()) - e.start;
-                        *acc.entry(e.project_id).or_insert(Duration::zero()) += duration;
-                        acc
-                    })
+            .filter(|e| e.start.date() >= from_date && e.start.date() <= to_date)
+            .fold(HashMap::new(), |mut acc, e| {
+                let duration = e.end.unwrap_or(Local::now().naive_local()) - e.start;
+                *acc.entry(e.project_id).or_insert(Duration::zero()) += duration;
+                acc
+            })
+    }
+
+    // New function to list entries by project
+    fn list_entries_by_project(&self, project_id: u32) -> Vec<TimeEntry> {
+        self.entries.iter()
+            .filter(|entry| entry.project_id == project_id)
+            .cloned() // Clone the filtered entries to return a Vec<TimeEntry>
+            .collect()
     }
 }
 
@@ -107,16 +101,11 @@ fn main() {
     let end = Some(NaiveDate::from_ymd(2023, 9, 15).and_hms(17, 30, 0));
     
     manager.add_entry(1, start, end);
+    manager.add_entry(2, start, end); // Added for demonstration
+    manager.add_entry(1, NaiveDate::from_ymd(2023, 9, 16).and_hms(9, 0, 0), Some(NaiveDate::from_ymd(2023, 9, 16).and_hms(17, 30, 0))); // Additional entry for project 1
 
-    let update_result = manager.update_entry(0, start, end);
-    if update_result.is_err() {
-        println!("Failed to update entry: {}", update_result.unwrap_err());
-    }
-
-    let delete_result = manager.delete_entry(1);
-    if delete_result.is_err() {
-        println!("Failed to delete entry: {}", delete_result.unwrap_err());
-    }
+    let project_entries = manager.list_entries_by_project(1);
+    println!("Entries for project 1: {:?}", project_entries);
 
     let project_time = manager.calculate_project_time(1);
     println!("Time spent on project 1: {:?}", project_time);
