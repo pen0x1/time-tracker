@@ -24,10 +24,10 @@ fn init_users_db() -> UsersDb {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
-fn register_user(users_db: UsersDb, username: &str, password: &str) -> Result<(), String> {
+fn register_user(users_db: UsersDb, username: &str, password: &str) -> Result<(), &'static str> {
     let mut db = users_db.lock().unwrap();
     if db.contains_key(username) {
-        Err("User already exists".to_string())
+        Err("User already exists")
     } else {
         db.insert(username.to_string(), create_user(username, password));
         Ok(())
@@ -41,31 +41,30 @@ fn create_user(username: &str, password: &str) -> User {
     }
 }
 
-fn login_user(users_db: UsersDb, username: &str, password: &str) -> Result<String, String> {
-    match authenticate_user(&users_db, username, password) {
-        Ok(user) => create_token_for_user(&user),
-        Err(e) => Err(e),
-    }
+fn login_user(users_db: UsersDb, username: &str, password: &str) -> Result<String, &'static str> {
+    authenticate_user(&users_db, username, password)
+        .and_then(create_token_for_user)
 }
 
-fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Result<User, String> {
+fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Result<User, &'static str> {
     let db = users_db.lock().unwrap();
     db.get(username)
         .filter(|user| user.password == password)
         .cloned()
-        .ok_or_else(|| "Invalid username or password".to_string())
+        .ok_or("Invalid username or password")
 }
 
 fn create_token_for_user(user: &User) -> Result<String, String> {
     let expiration = calculate_expiration(1); // 1 day
     let claims = Claims {
-        sub: user.username.to_owned(),
+        sub: user.username.clone(),
         exp: expiration,
     };
 
     let header = Header::new(Algorithm::HS256);
     let secret = env::var(SECRET_KEY).expect("SECRET_KEY must be set");
-    encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes())).map_err(|e| e.to_string())
+    encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))
+        .map_err(|e| e.to_string())
 }
 
 fn calculate_expiration(days: i64) -> usize {
@@ -75,7 +74,7 @@ fn calculate_expiration(days: i64) -> usize {
         .timestamp() as usize
 }
 
-fn verify_token(token: &str) -> bool {
+fn verify_token(_token: &str) -> bool {
     true // Placeholder for actual verification logic
 }
 
@@ -89,7 +88,7 @@ fn main() {
         Err(e) => println!("Error registering user: {}", e),
     }
 
-    match login_user(users_db.clone(), "newuser", "password123") {
+    match login_user(users_db, "newuser", "password123") {
         Ok(token) => println!("Logged in successfully. Token: {}", token),
         Err(e) => println!("Error logging in: {}", e),
     }
