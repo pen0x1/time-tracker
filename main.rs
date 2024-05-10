@@ -10,9 +10,19 @@ struct AuthenticateRequest {
 }
 
 #[derive(Deserialize)]
+struct BulkProjectRequest {
+    projects: Vec<ProjectRequest>,
+}
+
+#[derive(Deserialize)]
 struct ProjectRequest {
     name: String,
     description: String,
+}
+
+#[derive(Deserialize)]
+struct BulkTimeEntryRequest {
+    time_entries: Vec<TimeEntryRequest>,
 }
 
 #[derive(Deserialize)]
@@ -31,12 +41,14 @@ async fn authenticate_user_handler(item: web::Json<AuthenticateRequest>) -> Http
     HttpResponse::Ok().json(ApiResponse{message: format!("User {} authenticated", item.username)})
 }
 
-async fn manage_project_handler(item: web::Json<ProjectRequest>) -> HttpResponse {
-    HttpResponse::Ok().json(ApiResponse{message: format!("Project {} managed", item.name)})
+async fn manage_bulk_project_handler(item: web::Json<BulkProjectRequest>) -> HttpResponse {
+    let project_names: Vec<String> = item.projects.iter().map(|p| p.name.clone()).collect();
+    HttpResponse::Ok().json(ApiResponse{message: format!("Projects {:?} managed", project_names)})
 }
 
-async fn track_time_entry_handler(item: web::Json<TimeEntryRequest>) -> HttpResponse {
-    HttpResponse::Ok().json(ApiResponse{message: format!("Time entry for project_id {} tracked", item.project_id)})
+async fn track_bulk_time_entry_handler(item: web::Json<BulkTimeEntryRequest>) -> HttpResponse {
+    let project_ids: Vec<u32> = item.time_entries.iter().map(|te| te.project_id).collect();
+    HttpResponse::Ok().json(ApiResponse{message: format!("Time entries for project_ids {:?} tracked", project_ids)})
 }
 
 fn setup_api_routes(cfg: &mut web::ServiceConfig) {
@@ -44,8 +56,8 @@ fn setup_api_routes(cfg: &mut web::ServiceConfig) {
     .service(
         web::scope("/api")
             .route("/authenticate", web::post().to(authenticate_user_handler))
-            .route("/project", web::post().to(manage_project_handler))
-            .route("/time", web::post().to(track_time_entry_handler)),
+            .route("/projects/bulk", web::post().to(manage_bulk_project_handler))
+            .route("/time_entries/bulk", web::post().to(track_bulk_time_entry_handler)),
     );
 }
 
