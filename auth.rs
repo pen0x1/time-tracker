@@ -19,8 +19,13 @@ struct Claims {
 }
 
 type UsersDb = Arc<Mutex<HashMap<String, User>>>;
+type TokenCache = Arc<Mutex<HashMap<String, String>>>;
 
 fn init_users_db() -> UsersDb {
+    Arc::new(Mutex::new(HashMap::new()))
+}
+
+fn init_token_cache() -> TokenCache {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
@@ -41,9 +46,19 @@ fn create_user(username: &str, password: &str) -> User {
     }
 }
 
-fn login_user(users_db: UsersDb, username: &str, password: &str) -> Result<String, &'static str> {
-    authenticate_user(&users_db, username, password)
-        .and_then(create_token_for_user)
+fn login_user(users_db: UsersDb, token_cache: TokenCache, username: &str, password: &str) -> Result<String, &'static str> {
+    let user = authenticate_user(&users_db, username, password)?;
+
+    let token_cache_guard = token_cache.lock().unwrap();
+    if let Some(token) = token_cache_guard.get(username) {
+        return Ok(token.clone());
+    }
+
+    drop(token_cache_guard); // Explicitly drop the lock
+    let token = create_token_for_user(&user)?;
+    token_cache.lock().unwrap().insert(username.to_string(), token.clone());
+
+    Ok(token)
 }
 
 fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Result<User, &'static str> {
@@ -82,13 +97,14 @@ fn main() {
     dotenv::dotenv().ok();
 
     let users_db = init_users_db();
+    let token_cache = init_token_cache();
 
     match register_user(users_db.clone(), "newuser", "password123") {
         Ok(_) => println!("User registered successfully."),
         Err(e) => println!("Error registering user: {}", e),
     }
 
-    match login_user(users_db, "newuser", "password123") {
+    match login_user(users_db, token_cache.clone(), "newuser", "password123") {
         Ok(token) => println!("Logged in successfully. Token: {}", token),
         Err(e) => println!("Error logging in: {}", e),
     }
