@@ -9,9 +9,7 @@ const Login = ({ onLogin }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         console.log(`Login with ${email} and ${password}`);
-        // Simulate an API call
         try {
-            // Simulating error
             if (email === 'error@example.com') {
                 throw new Error('Invalid login credentials');
             }
@@ -48,13 +46,10 @@ const Register = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
         console.log(`Register with ${email} and ${password}`);
-        // Here you would typically handle the registration via API call.
-        // The try-catch block is to simulate error handling.
         try {
             if (email === 'error@example.com') {
                 throw new Error('Error during registration');
             }
-            // Assuming successful registration...
         } catch (err) {
             setError(err.message);
         }
@@ -106,18 +101,26 @@ const Summary = () => {
 const App = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+    const handleLogout = () => {
+        setIsLoggedIn(false);
+    };
+
     return (
         <Router>
             <div>
                 <nav>
                     <ul>
-                        <li><Link to="/register">Register</Link></li>
-                        <li><Link to="/login">Login</Link></li>
-                        {isLoggedIn && (
+                        {!isLoggedIn ? (
+                            <>
+                                <li><Link to="/register">Register</Link></li>
+                                <li><Link to="/login">Login</Link></li>
+                            </>
+                        ) : (
                             <>
                                 <li><Link to="/projects">Projects</Link></li>
                                 <li><Link to="/timelog">Time Log</Link></li>
                                 <li><Link to="/summary">Summary</Link></li>
+                                <li style={{cursor: 'pointer', color: 'blue'}} onClick={handleLogout}><a>Logout</a></li>
                             </>
                         )}
                     </ul>
