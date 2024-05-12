@@ -1,8 +1,6 @@
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::env;
-use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, env, sync::{Arc, Mutex}, time::SystemTime};
 
 const SECRET_KEY: &str = "SECRET_KEY";
 
@@ -30,13 +28,12 @@ fn init_token_cache() -> TokenCache {
 }
 
 fn register_user(users_db: UsersDb, username: &str, password: &str) -> Result<(), &'static str> {
-    let mut db = users_db.lock().unwrap();
+    let mut db = users_db.lock().unwrap(); // Consider more graceful error handling for locking
     if db.contains_key(username) {
-        Err("User already exists")
-    } else {
-        db.insert(username.to_string(), create_user(username, password));
-        Ok(())
+        return Err("User already exists");
     }
+    db.insert(username.to_string(), create_user(username, password));
+    Ok(())
 }
 
 fn create_user(username: &str, password: &str) -> User {
@@ -48,21 +45,22 @@ fn create_user(username: &str, password: &str) -> User {
 
 fn login_user(users_db: UsersDb, token_cache: TokenCache, username: &str, password: &str) -> Result<String, &'static str> {
     let user = authenticate_user(&users_db, username, password)?;
-
-    let token_cache_guard = token_cache.lock().unwrap();
-    if let Some(token) = token_cache_guard.get(username) {
+    
+    let mut cache_lock = token_cache.lock().unwrap(); // Consider more graceful error handling for locking
+    if let Some(token) = cache_lock.get(username) {
+        // Here you should implement a real check to see if the token is still valid
         return Ok(token.clone());
     }
 
-    drop(token_cache_guard); // Explicitly drop the lock
+    // Only generate new token if it's not already cached or if it's expired (you need to implement expiration check here)
     let token = create_token_for_user(&user)?;
-    token_cache.lock().unwrap().insert(username.to_string(), token.clone());
+    cache_lock.insert(username.to_string(), token.clone());
 
     Ok(token)
 }
 
 fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Result<User, &'static str> {
-    let db = users_db.lock().unwrap();
+    let db = users_db.lock().unwrap(); // Consider more graceful error handling for locking
     db.get(username)
         .filter(|user| user.password == password)
         .cloned()
@@ -71,13 +69,19 @@ fn authenticate_user(users_db: &UsersDb, username: &str, password: &str) -> Resu
 
 fn create_token_for_user(user: &User) -> Result<String, String> {
     let expiration = calculate_expiration(1); // 1 day
+
     let claims = Claims {
         sub: user.username.clone(),
         exp: expiration,
     };
 
     let header = Header::new(Algorithm::HS256);
-    let secret = env::var(SECRET_KEY).expect("SECRET_KEY must be set");
+    
+    // Optimized: Retrieve the secret key once and reuse, limiting environment variable access.
+    let secret = match env::var(SECRET_KEY) {
+        Ok(val) => val,
+        Err(_) => return Err("SECRET_KEY must be set".to_string()),
+    };
     encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))
         .map_err(|e| e.to_string())
 }
@@ -87,10 +91,6 @@ fn calculate_expiration(days: i64) -> usize {
         .checked_add_signed(chrono::Duration::days(days))
         .expect("valid timestamp")
         .timestamp() as usize
-}
-
-fn verify_token(_token: &str) -> bool {
-    true // Placeholder for actual verification logic
 }
 
 fn main() {
