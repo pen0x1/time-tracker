@@ -1,6 +1,7 @@
 use actix_web::{web, App, HttpResponse, HttpServer, middleware::Logger, Error, http::StatusCode};
 use dotenv::dotenv;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::env;
 
 #[derive(Deserialize)]
@@ -33,32 +34,52 @@ struct TimeEntryRequest {
 }
 
 #[derive(Serialize)]
-struct ApiResponse {
+struct ApiResponse<T = Value> {
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<T>,
 }
 
-async fn authenticate_user_handler(item: web::Json<AuthenticateRequest>) -> HttpResponse {
-    HttpResponse::Ok().json(ApiResponse{message: format!("User {} authenticated", item.username)})
+impl ApiResponse<Value> {
+    fn new(message: String) -> Self {
+        ApiResponse {
+            message,
+            data: None,
+        }
+    }
 }
 
-async fn manage_bulk_project_handler(item: web::Json<BulkProjectRequest>) -> HttpResponse {
+impl<T> ApiResponse<T> {
+    fn with_data(message: String, data: T) -> ApiResponse<T> {
+        ApiResponse {
+            message,
+            data: Some(data),
+        }
+    }
+}
+
+async fn authenticate_user_handler(item: web::Json<AuthenticateRequest>) -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::Ok().json(ApiResponse::new(format!("User {} authenticated", item.username))))
+}
+
+async fn manage_bulk_project_handler(item: web::Json<BulkProjectRequest>) -> Result<HttpResponse, Error> {
     let project_names: Vec<String> = item.projects.iter().map(|p| p.name.clone()).collect();
-    HttpResponse::Ok().json(ApiResponse{message: format!("Projects {:?} managed", project_names)})
+    Ok(HttpResponse::Ok().json(ApiResponse::with_data(format!("Projects managed"), project_names)))
 }
 
-async fn track_bulk_time_entry_handler(item: web::Json<BulkTimeEntryRequest>) -> HttpResponse {
+async fn track_bulk_time_entry_handler(item: web::Json<BulkTimeEntryRequest>) -> Result<HttpResponse, Error> {
     let project_ids: Vec<u32> = item.time_entries.iter().map(|te| te.project_id).collect();
-    HttpResponse::Ok().json(ApiResponse{message: format!("Time entries for project_ids {:?} tracked", project_ids)})
+    Ok(HttpResponse::Ok().json(ApiResponse::with_data(format!("Time entries tracked"), project_ids)))
 }
 
 fn setup_api_routes(cfg: &mut web::ServiceConfig) {
     cfg
-    .service(
-        web::scope("/api")
-            .route("/authenticate", web::post().to(authenticate_user_handler))
-            .route("/projects/bulk", web::post().to(manage_bulk_project_handler))
-            .route("/time_entries/bulk", web::post().to(track_bulk_time_entry_handler)),
-    );
+        .service(
+            web::scope("/api")
+                .route("/authenticate", web::post().to(authenticate_user_handler))
+                .route("/projects/bulk", web::post().to(manage_bulk_project_handler))
+                .route("/time_entries/bulk", web::post().to(track_bulk_time_entry_handler)),
+        );
 }
 
 #[actix_web::main]
@@ -78,11 +99,11 @@ async fn main() -> std::io::Result<()> {
                 web::route().to(|req| async move {
                     eprintln!("Handling 404 for {:?}", req);
                     HttpResponse::build(StatusCode::NOT_FOUND)
-                        .json(ApiResponse{message: "404 Not Found".to_string()})
+                        .json(ApiResponse::new("404 Not Found".to_string()))
                 }),
             )
     })
-    .bind(server_address)?
+    .bind(&server_address)?
     .run()
     .await
 }
